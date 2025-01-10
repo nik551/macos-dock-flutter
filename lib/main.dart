@@ -11,6 +11,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       home: Scaffold(
         body: Center(
           child: Dock(
@@ -56,54 +57,10 @@ class Dock<T> extends StatefulWidget {
 
 class _DockState<T> extends State<Dock<T>> {
   late final List<T> _items = widget.items.toList();
+  int? _dragIndex;
+  int? _targetIndex;
   bool _isDragging = false;
-
-
-  Widget _buildDraggableItem(T item, int index) {
-    return Draggable<int>(
-      data: index,
-      onDragStarted: () {
-        setState(() {
-          _isDragging = true;
-        });
-      },
-      onDragEnd: (_) {
-        setState(() {
-          _isDragging = false;
-        });
-      },
-       onDraggableCanceled: (_, __) {
-        setState(() {
-          _isDragging = false;
-        });
-      },
-
-      feedback: Material(
-        color: Colors.transparent,
-        child: widget.builder(item),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.5,
-        child: widget.builder(item),
-      ),
-      child: DragTarget<int>(
-        onWillAcceptWithDetails: (data) => data != index,
-        onAcceptWithDetails: (draggedIndex) {
-          setState(() {
-            final draggedItem = _items[draggedIndex.data];
-            final newItems = List<T>.from(_items);
-            newItems.removeAt(draggedIndex.data);
-            newItems.insert(index, draggedItem);
-            _items.clear();
-            _items.addAll(newItems);
-          });
-        },
-        builder: (context, candidateData, rejectedData) {
-          return widget.builder(item);
-        },
-      ),
-    );
-  }
+  bool _newCase = false;
 
   @override
   Widget build(BuildContext context) {
@@ -115,11 +72,96 @@ class _DockState<T> extends State<Dock<T>> {
       padding: const EdgeInsets.all(4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int i = 0; i < _items.length; i++) 
-            _buildDraggableItem(_items[i], i),
-        ],
+        children: _buildDraggableItems(),
       ),
     );
+  }
+
+  List<Widget> _buildDraggableItems() {
+    return List.generate(_items.length, (index) {
+      final item = _items[index];
+      return Draggable<int>(
+        data: index,
+        onDragStarted: () {
+          setState(() {
+            _dragIndex = index;
+            _isDragging = true;
+          });
+        },
+        onDragEnd: (_) {
+          setState(() {
+            _isDragging = false;
+            _dragIndex = null;
+            _newCase = false;
+            _targetIndex = null;
+          });
+        },
+        onDraggableCanceled: (_, __) {
+          setState(() {
+            _isDragging = false;
+            _dragIndex = null;
+            _newCase = false;
+
+            _targetIndex = null;
+          });
+        },
+        feedback: Material(
+          color: Colors.transparent,
+          child: widget.builder(item),
+        ),
+        childWhenDragging: SizedBox(
+          width: _isDragging ? 0 : null,
+          height: 48,
+          child: _isDragging ? const SizedBox.shrink() : widget.builder(item),
+        ),
+        child: DragTarget<int>(
+          onWillAcceptWithDetails: (draggedIndex) {
+            if (_isDragging) {
+              setState(() {
+                _targetIndex = index;
+                // if (draggedIndex.data < index) {
+                //   _newCase = true;
+                //   _targetIndex = index - 1;
+                // } else {
+                //   _targetIndex = index;
+                // }
+              });
+              return draggedIndex.data != index;
+            }
+            return false;
+          },
+          onAcceptWithDetails: (draggedIndex) {
+            setState(() {
+              final item = _items.removeAt(draggedIndex.data);
+              _items.insert(index, item);
+              _dragIndex = null;
+              _newCase = false;
+              _targetIndex = null;
+              _isDragging = false;
+            });
+          },
+          onLeave: (data) {
+            setState(() {
+              _isDragging = true;
+              _newCase = false;
+
+              _targetIndex = null;
+            });
+          },
+          builder: (context, candidateData, rejectedData) {
+            bool leftRight = _dragIndex != null && _dragIndex! < index;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              margin: EdgeInsets.only(
+                left: _targetIndex == index && !leftRight ? 48 : 0,
+                right: _targetIndex == index && leftRight ? 48 : 0,
+              ),
+              child: widget.builder(item),
+            );
+          },
+        ),
+      );
+    });
   }
 }
