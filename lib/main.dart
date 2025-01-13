@@ -1,3 +1,4 @@
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 
@@ -60,7 +61,15 @@ class _DockState<T> extends State<Dock<T>> {
   int? _dragIndex;
   int? _targetIndex;
   bool _isDragging = false;
-  bool _newCase = false;
+  int? _hoveredIndex;
+
+  double _getScale(int index) {
+    if (_hoveredIndex == null) return 1.0;
+    final distance = (index - _hoveredIndex!).abs();
+    if (distance == 0) return 1.1;
+    if (distance == 1) return 1.05;
+    return 1.0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,12 +81,12 @@ class _DockState<T> extends State<Dock<T>> {
       padding: const EdgeInsets.all(4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: _buildDraggableItems(),
+        children: buildDraggables(),
       ),
     );
   }
 
-  List<Widget> _buildDraggableItems() {
+  List<Widget> buildDraggables() {
     return List.generate(_items.length, (index) {
       final item = _items[index];
       return Draggable<int>(
@@ -92,7 +101,6 @@ class _DockState<T> extends State<Dock<T>> {
           setState(() {
             _isDragging = false;
             _dragIndex = null;
-            _newCase = false;
             _targetIndex = null;
           });
         },
@@ -100,31 +108,20 @@ class _DockState<T> extends State<Dock<T>> {
           setState(() {
             _isDragging = false;
             _dragIndex = null;
-            _newCase = false;
-
             _targetIndex = null;
           });
         },
-        feedback: Material(
-          color: Colors.transparent,
-          child: widget.builder(item),
-        ),
+        feedback: widget.builder(item),
         childWhenDragging: SizedBox(
-          width: _isDragging ? 0 : null,
+          width: 0,
           height: 48,
-          child: _isDragging ? const SizedBox.shrink() : widget.builder(item),
+          child: SizedBox.shrink(),
         ),
         child: DragTarget<int>(
           onWillAcceptWithDetails: (draggedIndex) {
             if (_isDragging) {
               setState(() {
                 _targetIndex = index;
-                // if (draggedIndex.data < index) {
-                //   _newCase = true;
-                //   _targetIndex = index - 1;
-                // } else {
-                //   _targetIndex = index;
-                // }
               });
               return draggedIndex.data != index;
             }
@@ -135,7 +132,6 @@ class _DockState<T> extends State<Dock<T>> {
               final item = _items.removeAt(draggedIndex.data);
               _items.insert(index, item);
               _dragIndex = null;
-              _newCase = false;
               _targetIndex = null;
               _isDragging = false;
             });
@@ -143,21 +139,26 @@ class _DockState<T> extends State<Dock<T>> {
           onLeave: (data) {
             setState(() {
               _isDragging = true;
-              _newCase = false;
-
               _targetIndex = null;
             });
           },
           builder: (context, candidateData, rejectedData) {
             bool leftRight = _dragIndex != null && _dragIndex! < index;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              margin: EdgeInsets.only(
-                left: _targetIndex == index && !leftRight ? 48 : 0,
-                right: _targetIndex == index && leftRight ? 48 : 0,
+            return MouseRegion(
+              onEnter: (_) => setState(() => _hoveredIndex = index),
+              onExit: (_) => setState(() => _hoveredIndex = null),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                margin: EdgeInsets.only(
+                  left: _targetIndex == index && !leftRight ? 48 : 0,
+                  right: _targetIndex == index && leftRight ? 48 : 0,
+                ),
+                transform: Matrix4.identity()
+                  ..scale(_getScale(index))
+                  ..translate(0.0, _hoveredIndex == index ? -4.0 : 0.0),
+                child: widget.builder(item),
               ),
-              child: widget.builder(item),
             );
           },
         ),
